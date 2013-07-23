@@ -22,7 +22,8 @@ import android.media.AudioManager;
 import android.media.SoundPool;
 import android.util.Log;
 
-import org.apache.cordova.api.Plugin;
+import org.apache.cordova.api.CordovaPlugin;
+import org.apache.cordova.api.CallbackContext;
 import org.apache.cordova.api.PluginResult;
 import org.apache.cordova.api.PluginResult.Status;
 
@@ -30,7 +31,7 @@ import org.apache.cordova.api.PluginResult.Status;
  * @author triceam
  *
  */
-public class PGLowLatencyAudio extends Plugin {
+public class PGLowLatencyAudio extends CordovaPlugin {
 
 	public static final String ERROR_NO_AUDIOID="A reference does not exist for the specified audio id.";
 	public static final String ERROR_AUDIOID_EXISTS="A reference already exists for the specified audio id.";
@@ -48,13 +49,22 @@ public class PGLowLatencyAudio extends Plugin {
 	private static SoundPool soundPool;
 	private static HashMap<String, PGLowLatencyAudioAsset> assetMap; 
 	private static HashMap<String, Integer> soundMap; 
-	private static HashMap<String, ArrayList<Integer>> streamMap; 
+	private static HashMap<String, ArrayList<Integer>> streamMap;
+	
+	public PGLowLatencyAudio()
+	{
+		super();
+		soundPool = null;
+		assetMap = null;
+		soundMap = null;
+		streamMap = null;
+	}
 	
 	/* (non-Javadoc)
 	 * @see com.phonegap.api.Plugin#execute(java.lang.String, org.json.JSONArray, java.lang.String)
 	 */
 	@Override
-	public PluginResult execute(String action, JSONArray data, String callbackId) 
+	public boolean execute(String action, JSONArray data, CallbackContext context) 
 	{
 		PluginResult result = null;
 		initSoundPool();
@@ -69,10 +79,10 @@ public class PGLowLatencyAudio extends Plugin {
 			{
 				if ( !soundMap.containsKey(audioID) )
 				{
-					String assetPath =data.getString(1);
+					String assetPath = data.getString(1);
 					String fullPath = "www/".concat( assetPath );
 					
-					AssetManager am =   ctx.getResources().getAssets(); 
+					AssetManager am = this.cordova.getActivity().getApplicationContext().getResources().getAssets(); 
 					AssetFileDescriptor afd = am.openFd(fullPath);
 					int assetIntID = soundPool.load(afd, 1);
 					soundMap.put( audioID , assetIntID );
@@ -80,6 +90,7 @@ public class PGLowLatencyAudio extends Plugin {
 				else 
 				{
 					result = new PluginResult(Status.ERROR, ERROR_AUDIOID_EXISTS);
+					context.error(ERROR_AUDIOID_EXISTS);
 				}
 			}
 			else if ( PRELOAD_AUDIO.equals( action ) ) 
@@ -88,9 +99,9 @@ public class PGLowLatencyAudio extends Plugin {
 				{
 					String assetPath =data.getString(1);
 					int voices;
-					if ( data.length() < 2 )
+					if ( data.length() < 2 || data.isNull(2) )
 					{
-						voices = 0;
+						voices = 1; // Default value should be 1
 					}
 					else
 					{
@@ -99,7 +110,7 @@ public class PGLowLatencyAudio extends Plugin {
 					
 					String fullPath = "www/".concat( assetPath );
 					
-					AssetManager am = ctx.getResources().getAssets(); 
+					AssetManager am = this.cordova.getActivity().getApplicationContext().getResources().getAssets(); 
 					AssetFileDescriptor afd = am.openFd(fullPath);
 					
 					PGLowLatencyAudioAsset asset = new PGLowLatencyAudioAsset( afd, voices );
@@ -108,6 +119,7 @@ public class PGLowLatencyAudio extends Plugin {
 				else 
 				{
 					result = new PluginResult(Status.ERROR, ERROR_AUDIOID_EXISTS);
+					context.error(ERROR_AUDIOID_EXISTS);
 				}
 			}
 			else if ( PLAY.equals( action ) || LOOP.equals( action ) ) 
@@ -132,13 +144,14 @@ public class PGLowLatencyAudio extends Plugin {
 						streams = new ArrayList<Integer>();
 					
 					int assetIntID = soundMap.get( audioID );
-					int streamID = soundPool.play( assetIntID, 1, 1, 1, loops, 1);
+					int streamID = soundPool.play( assetIntID, 1.0f, 1.0f, 1, loops, 1.0f);
 					streams.add( streamID );
 					streamMap.put( audioID , streams );
 				}
 				else 
 				{
 					result = new PluginResult(Status.ERROR, ERROR_NO_AUDIOID);
+					context.error(ERROR_NO_AUDIOID);
 				}
 			}
 			else if ( STOP.equals( action ) || UNLOAD.equals( action ) ) 
@@ -161,6 +174,7 @@ public class PGLowLatencyAudio extends Plugin {
 				else 
 				{
 					result = new PluginResult(Status.ERROR, ERROR_NO_AUDIOID);
+					context.error(ERROR_NO_AUDIOID);
 				}
 			}
 			
@@ -181,6 +195,7 @@ public class PGLowLatencyAudio extends Plugin {
 				else 
 				{
 					result = new PluginResult(Status.ERROR, ERROR_NO_AUDIOID);
+					context.error(ERROR_NO_AUDIOID);
 				}
 			}
 			
@@ -192,10 +207,19 @@ public class PGLowLatencyAudio extends Plugin {
 		catch (Exception ex) 
 		{
 			result = new PluginResult(Status.ERROR, ex.toString());
+			context.error(ex.toString());
 		}
 		
+		if (result.getStatus() == Status.ERROR.ordinal())
+			Log.e(this.getClass().getSimpleName(), result.getMessage());
 		
-		return result;
+		if (result.getStatus() == Status.OK.ordinal())
+		{
+			context.success();
+			return true;
+		}
+		else
+			return false;
 	}
 
 	private void initSoundPool() 
